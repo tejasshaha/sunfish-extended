@@ -60,8 +60,17 @@ def pv(color, pos):
 		res.append(str(pos.score if color==origc else -pos.score))
 	return ' '.join(res)
 
+
 def main():
 	pos = parseFEN(FEN_INITIAL)
+        if sys.argv.__len__()==3:
+            if sys.argv[2]=="analyze":
+            	sunfish.setAnalyzeMode()
+            else:
+                print("Usage: python sunfish analyze")
+                exit()
+        sunfish.initDatabaseAndCheckPlayer(sys.argv[1])
+
 	forced = False
 	color = WHITE
 	time, otim = 1, 1
@@ -120,6 +129,8 @@ def main():
 		elif smove.startswith('usermove'):
 			_, smove = smove.split()
 			m = mparse(color, smove)
+            		if sunfish.analyzeMode==False :
+                		sunfish.analyzeHumansMove(m,pos)
 			pos = pos.move(m)
 			color = 1-color
 			if not forced:

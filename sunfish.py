@@ -153,6 +153,22 @@ aggressive_val= 0
 defence_val= 0
 safetyKing_val= 0
 
+def setAnalyzeMode():
+    global analyzeMode
+    global central_val
+    global wing_val
+    global active_val
+    global aggressive_val
+    global defence_val
+    global safetyKing_val
+    central_val= 1
+    wing_val= 1
+    active_val= 1
+    aggressive_val=1
+    defence_val=1
+    safetyKing_val=1
+    analyzeMode= True
+
 ###############################################################################
 # Chess logic
 ###############################################################################
@@ -460,13 +476,13 @@ def normalizeParameters():
 
 def analyzeHumansMove(move,pos):
     global central_val
-    central_val+= 1 if checkIfCentralFields(move)>0 else -0.3
+    central_val+= 1 if checkIfCentralFields(move)>0 else -0.4
     global wing_val
     wing_val+= 1 if checkIfWingFields(move)>0 else -0.4
     global active_val
     active_val+= 1 if checkIfActiveActiveFields(move,pos)>0 else -0.4
     global aggressive_val
-    aggressive_val+= 1 if checkIfAggressivePlay(move,pos)>0 else -0.4
+    aggressive_val+= 1 if checkIfAggressivePlay(move,pos)>0 else -0.5
     global defence_val
     defence_val+= 1 if checkIfDefensivePlay(move)>0 else -0.4
     global safetyKing_val
