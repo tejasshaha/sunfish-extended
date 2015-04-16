@@ -5,7 +5,9 @@ from __future__ import print_function
 import sys
 from itertools import count
 from collections import Counter, OrderedDict, namedtuple
+from Tkinter import *
 import MySQLdb
+import atexit
 
 # The table size is the maximum number of elements in the transposition table.
 TABLE_SIZE = 1e6
@@ -126,20 +128,19 @@ pst = {
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 }
 
+#depth of analyze human aspect
+humanDepth= 0
+
 playerName= "player"
+
+analyzeMode= False
+analyzedMoves= []
 
 CENTRAL_FIELDS= [53,54,55,56,57,63,64,65,66,67]
 WING_FIELDS= [21,22,27,28,31,32,37,38,41,42,47,48,51,52,57,58,61,62,67,68,71,72,77,78,81,82,87,88,91,92,97,98]
 INACTIVE_FIELDS= [91,92,93,94,95,96,97,98]
 AGGRESSIVE_FIELDS= [21,22,23,24,25,26,27,28,31,32,33,34,35,36,37,38]
 DEFENCE_FIELDS= [81,82,83,84,85,86,87,88,91,92,93,94,95,96,97,98]
-
-centralFactor= 0.8
-wingFactor= 0.8
-activeFactor= 0.5
-aggressiveFactor= 0.5
-defenceFactor= 0.5
-safetyKingFactor= 0.5
 
 # opossites:
 # safety king <> active play
@@ -273,51 +274,50 @@ def findPosKing(pos):
         if p=='K':
             return i
 
+# analyze human move
+
 def checkIfCentralFields(move):
-    score=0
-    if move[1] in CENTRAL_FIELDS:
-        score+=centralFactor * central_val
-    return score
+    return move[1] in CENTRAL_FIELDS
+
+def checkIfWingFields(move):
+    return move[1] in WING_FIELDS
 
 def checkIfActiveActiveFields(move,pos):
-    score=0
-    if move[0] in INACTIVE_FIELDS and move[1] not in INACTIVE_FIELDS and pos.board[move[0]]!= 'K':
-        score+=activeFactor * active_val
-    return score
+    return move[0] in INACTIVE_FIELDS and move[1] not in INACTIVE_FIELDS and pos.board[move[0]]!= 'K'
 
 def checkIfAggressivePlay(move,pos):
-    score=0
     if move[1] in AGGRESSIVE_FIELDS:
-        score+=aggressiveFactor*aggressive_val*0.7
+        return True
+    aggressive_parameter= 0
     p= pos.board[move[0]]
     for d in directions[p]:
         for j in count(move[1]+d, d):
             q= pos.board[j]
             if pos.board[j].isspace(): break
             if q.isupper():
-                score-=0.1*defenceFactor*defence_val
+                aggressive_parameter-=0.5
                 break
             if q.islower():
-                score+=0.2*aggressiveFactor*aggressive_val
+                aggressive_parameter+=0.6
                 if q=='k':
-                    score+=0.7*aggressiveFactor*aggressive_val
+                    aggressive_parameter+=1
                 break
             if p in ('P', 'N', 'K'): break
-    return score
+    if aggressive_parameter>0:
+        return True
+    else:
+        return False
 
 def checkIfDefensivePlay(move):
-    score=0
-    if move[1] in DEFENCE_FIELDS:
-        score+=defenceFactor*defence_val
-    return score
+    return move[1] in DEFENCE_FIELDS
 
 def checkIfSafetyKing(move,pos):
-    score=0
+    safety_parameter=0
     kingPos= findPosKing(pos)
     if move[0] in [kingPos+N,kingPos+N+E,kingPos+N+W] and move[1] not in [kingPos+N,kingPos+N+E,kingPos+N+W]:
-        score-= safetyKingFactor*safetyKing_val
+        safety_parameter-= 0.5
     if move[1] in [kingPos+N,kingPos+N+E,kingPos+N+W]:
-        score+= safetyKingFactor*safetyKing_val
+        safety_parameter+= 0.6
     if move[0]==kingPos:
         defenceCounter=0
         if move[0] in DEFENCE_FIELDS:
@@ -333,33 +333,161 @@ def checkIfSafetyKing(move,pos):
                 defenceCounter+=1
             if pos.board[move[1]+N+W].isupper:
                 defenceCounter+=1
-            score+=safetyKingFactor*safetyKing_val*defenceCounter
+            safety_parameter+=0.8*defenceCounter
+    if safety_parameter>0:
+        return True
+    else:
+        return False
+#############################################################
+
+# computer decision
+
+def analyzeCentralFields(move):
+    if analyzeMode:
+        val_factor= central_val
+    else:
+        val_factor= wing_val
+    score=0
+    if move[1] in CENTRAL_FIELDS:
+        score+=0.3 * val_factor
     return score
+
+def analyzeWingFields(move):
+    if analyzeMode:
+        val_factor= wing_val
+    else:
+        val_factor= central_val
+    score=0
+    if move[1] in WING_FIELDS:
+        score+=0.3*val_factor
+    return score
+
+def analyzeActiveActiveFields(move,pos):
+    if analyzeMode:
+        val_factor= active_val
+    else:
+        val_factor= safetyKing_val
+    score=0
+    if move[0] in INACTIVE_FIELDS and move[1] not in INACTIVE_FIELDS and pos.board[move[0]]!= 'K':
+        score+=0.3 * val_factor
+    return score
+
+def analyzeAggressivePlay(move,pos):
+    if analyzeMode:
+        val_factor= aggressive_val
+        val_oppossite= defence_val
+    else:
+        val_factor= defence_val
+        val_oppossite= aggressive_val
+    score=0
+    if move[1] in AGGRESSIVE_FIELDS:
+        score+= 0.25*val_factor
+    p= pos.board[move[0]]
+    for d in directions[p]:
+        for j in count(move[1]+d, d):
+            q= pos.board[j]
+            if pos.board[j].isspace(): break
+            if q.isupper():
+                score-= 0.05*val_oppossite
+                break
+            if q.islower():
+                score+=0.05*val_factor
+                if q=='k':
+                    score+=0.3*val_factor
+                break
+            if p in ('P', 'N', 'K'): break
+    return score
+
+def analyzeDefensivePlay(move):
+    if analyzeMode:
+        val_factor= defence_val
+    else:
+        val_factor= aggressive_val
+    score=0
+    if move[1] in DEFENCE_FIELDS:
+        score+= 0.3*val_factor
+    return score
+
+def analyzeSafetyKing(move,pos):
+    if analyzeMode:
+        val_factor= safetyKing_val
+    else:
+        val_factor= active_val
+    score=0
+    kingPos= findPosKing(pos)
+    if move[0] in [kingPos+N,kingPos+N+E,kingPos+N+W] and move[1] not in [kingPos+N,kingPos+N+E,kingPos+N+W]:
+        score-= 0.3*val_factor
+    if move[1] in [kingPos+N,kingPos+N+E,kingPos+N+W]:
+        score+= 0.3*val_factor
+    if move[0]==kingPos:
+        defenceCounter=0
+        if move[0] in DEFENCE_FIELDS:
+            if pos.board[move[0]+N].isupper:
+                defenceCounter-=1
+            if pos.board[move[0]+N+E].isupper:
+                defenceCounter-=1
+            if pos.board[move[0]+N+W].isupper:
+                defenceCounter-=1
+            if pos.board[move[1]+N].isupper:
+                defenceCounter+=1
+            if pos.board[move[1]+N+E].isupper:
+                defenceCounter+=1
+            if pos.board[move[1]+N+W].isupper:
+                defenceCounter+=1
+            score+= 0.3*val_factor*defenceCounter
+    return score
+#############################################################################
+
+def normalizeParameters():
+    global central_val
+    global wing_val
+    global active_val
+    global aggressive_val
+    global defence_val
+    global safetyKing_val
+    if central_val<0:
+        central_val=0
+    if wing_val<0:
+        wing_val=0
+    if active_val<0:
+        active_val=0
+    if aggressive_val<0:
+        aggressive_val=0
+    if defence_val<0:
+        defence_val=0
+    if safetyKing_val<0:
+        safetyKing_val=0
 
 def analyzeHumansMove(move,pos):
     global central_val
-    central_val+= 1 if checkIfCentralFields(move)>0 else 0
+    central_val+= 1 if checkIfCentralFields(move)>0 else -0.3
+    global wing_val
+    wing_val+= 1 if checkIfWingFields(move)>0 else -0.4
     global active_val
-    active_val+= 1 if checkIfActiveActiveFields(move,pos)>0 else 0
+    active_val+= 1 if checkIfActiveActiveFields(move,pos)>0 else -0.4
     global aggressive_val
-    aggressive_val+= 1 if checkIfAggressivePlay(move,pos)>0 else 0
+    aggressive_val+= 1 if checkIfAggressivePlay(move,pos)>0 else -0.4
     global defence_val
-    defence_val+= 1 if checkIfDefensivePlay(move)>0 else 0
+    defence_val+= 1 if checkIfDefensivePlay(move)>0 else -0.4
     global safetyKing_val
-    safetyKing_val+= 1 if checkIfSafetyKing(move,pos)>0 else 0
+    safetyKing_val+= 1 if checkIfSafetyKing(move,pos)>0 else -0.4
+
+    normalizeParameters()
 
 def obtainMove(move,pos):
     scoreShift=0
     #central play
-    scoreShift+= checkIfCentralFields(move,pos)
+    scoreShift+= analyzeCentralFields(move)
+    #wing play
+    scoreShift+= analyzeWingFields(move)
     #tempo mobility
-    scoreShift+= checkIfActiveActiveFields(move,pos)
+    scoreShift+= analyzeActiveActiveFields(move,pos)
     #aggressive
-    scoreShift+= checkIfAggressivePlay(move,pos)
+    scoreShift+= analyzeAggressivePlay(move,pos)
     #defensive
-    scoreShift+= checkIfDefensivePlay(move)
+    scoreShift+= analyzeDefensivePlay(move)
     #king safety
-    scoreShift+= checkIfSafetyKing(move,pos)
+    scoreShift+= analyzeSafetyKing(move,pos)
 
     return scoreShift
 #############################################
@@ -398,7 +526,9 @@ def bound(pos, gamma, depth):
         # We check captures with the value function, as it also contains ep and kp
         if depth <= 0 and pos.value(move) < 150:
             break
-        addedScore= obtainMove(move,pos)
+
+        addedScore= obtainMove(move,pos) if depth>humanDepth else 0
+
         score = -bound(pos.move(move), 1-gamma, depth-1) +addedScore
         if score > best:
             best = score
@@ -431,12 +561,15 @@ def search(pos, maxn=NODES_SEARCHED):
     # We limit the depth to some constant, so we don't get a stack overflow in
     # the end game.
     for depth in range(1, 99):
+        global humanDepth
+        humanDepth= depth-3
         # The inner loop is a binary search on the score of the position.
         # Inv: lower <= score <= upper
         # However this may be broken by values from the transposition table,
         # as they don't have the same concept of p(score). Hence we just use
         # 'lower < upper - margin' as the loop condition.
         lower, upper = -3*MATE_VALUE, 3*MATE_VALUE
+
         while lower < upper - 3:
             gamma = (lower+upper+1)//2
             score = bound(pos, gamma, depth)
@@ -444,8 +577,14 @@ def search(pos, maxn=NODES_SEARCHED):
                 lower = score
             if score < gamma:
                 upper = score
-        
+
         print("Searched %d nodes. Depth %d. Score %d(%d/%d)" % (nodes, depth, score, lower, upper))
+        if analyzeMode:
+            new_move= tp.get(pos).move
+            for i, (t1,t2) in enumerate(analyzedMoves):
+                if t1==new_move:
+                    del analyzedMoves[i]
+            analyzedMoves.append((new_move,score))
 
         # We stop deepening if the global N counter shows we have spent too
         # long, or if we have already won the game.
@@ -465,36 +604,38 @@ def search(pos, maxn=NODES_SEARCHED):
 ###############################################################################
 
 def fillFactorsFromDatabase(player):
-    global playerName
     global central_val
     global wing_val
     global active_val
     global aggressive_val
     global defence_val
     global safetyKing_val
-    playerName=player[1]
     central_val= player[2]
-    active_val=player[3]
-    aggressive_val=player[4]
-    defence_val=player[5]
-    safetyKing_val=player[6]
+    wing_val= player[3]
+    active_val=player[4]
+    aggressive_val=player[5]
+    defence_val=player[6]
+    safetyKing_val=player[7]
 
 def initDatabaseAndCheckPlayer(name):
     try:
         db = MySQLdb.connect(host="localhost",user="root",passwd="0501",db="sunfish_database")
         with db:
             cur = db.cursor()
-            cur.execute("DROP TABLE IF EXISTS Players")
-            cur.execute("CREATE TABLE Players(Id INT PRIMARY KEY AUTO_INCREMENT, Name VARCHAR(25), centralValue INTEGER,"
-               "wingValue INTEGER, activeValue INTEGER , aggressiveValue INTEGER , defenceValue INTEGER , safetyKingValue INTEGER )")
+           # cur.execute("DROP TABLE IF EXISTS Players")
+         #   cur.execute("CREATE TABLE Players(Id INT PRIMARY KEY AUTO_INCREMENT, Name VARCHAR(25), centralValue DOUBLE,"
+         #      "wingValue DOUBLE, activeValue DOUBLE , aggressiveValue DOUBLE , defenceValue DOUBLE , safetyKingValue DOUBLE )")
             # check for player
-            cur.execute("SELECT * FROM Players")
+            cur.execute("SELECT * FROM Players WHERE Name=%s",name)
             player = cur.fetchone()
+            print(player)
             if player is None:
                 cur.execute("INSERT INTO Players(Name,centralValue,wingValue,activeValue,aggressiveValue,defenceValue,"
                             "safetyKingValue) VALUES(%s,0,0,0,0,0,0)",name)
             else:
                 fillFactorsFromDatabase(player)
+            global playerName
+            playerName= name
     except MySQLdb.Error, e:
         print("Error %d: %s" % (e.args[0],e.args[1]))
         sys.exit(1)
@@ -502,6 +643,7 @@ def initDatabaseAndCheckPlayer(name):
         if db:
             db.close()
 
+@atexit.register
 def savePlayerIntoDatabase():
     try:
         db = MySQLdb.connect(host="localhost",user="root",passwd="0501",db="sunfish_database")
@@ -535,12 +677,77 @@ def render(i):
     rank, fil = divmod(i - A1, 10)
     return chr(fil + ord('a')) + str(-rank + 1)
 
+def encode(i):
+    move0= H1-(i[0]-A8)
+    move1= H1-(i[1]-A8)
+    return move0, move1
+
+
+def defenceScale(val):
+    global defence_val
+    defence_val= float(val)
+
+def centralScale(val):
+    global central_val
+    central_val= float(val)
+
+def wingScale(val):
+    global wing_val
+    wing_val= float(val)
+
+def activeScale(val):
+    global active_val
+    active_val= float(val)
+
+def aggressiveScale(val):
+    global aggressive_val
+    aggressive_val= float(val)
+
+def safetyKingScale(val):
+    global safetyKing_val
+    safetyKing_val= float(val)
+
+def prepareScaleGui():
+    master = Tk()
+
+    frame = Frame(master)
+    frame.pack()
+
+    bottomframe = Frame(master)
+    bottomframe.pack( side = BOTTOM )
+
+    endframe= Frame(master)
+    endframe.pack( side = BOTTOM )
+
+    w1 = Scale(frame, from_=0, to=6, label="aggressive", fg="Blue", resolution=0.1, command=aggressiveScale)
+    w2 = Scale(frame, from_=0, to=6, label="defence", fg="Red", resolution=0.1, command=defenceScale)
+    w3 = Scale(bottomframe, from_=0, to=6, label="centrality", fg="Blue", resolution=0.1, command=centralScale)
+    w4 = Scale(bottomframe, from_=0, to=6, label="wings", fg="Red", resolution=0.1, command=wingScale)
+    w5 = Scale(endframe, from_=0, to=6, label="activity", fg="Blue", resolution=0.1, command=activeScale)
+    w6 = Scale(endframe, from_=0, to=6, label="safety", fg="Red", resolution=0.1, command=safetyKingScale)
+    w1.pack(side= LEFT)
+    w2.pack(side= LEFT)
+    w3.pack(side= LEFT)
+    w4.pack(side= LEFT)
+    w5.pack(side= LEFT)
+    w6.pack(side= LEFT)
 
 def main():
     pos = Position(initial, 0, (True,True), (True,True), 0, 0)
 
+    if sys.argv.__len__() < 2:
+        print("Usage: python sunfish [player name]")
+        exit()
+    if sys.argv.__len__()==3:
+        if sys.argv[2]=="analyze":
+            global analyzeMode
+            analyzeMode= True
+            prepareScaleGui()
+        else:
+            print("Usage: python sunfish [player name] analyze")
+            exit()
+
     initDatabaseAndCheckPlayer(sys.argv[1])
-    savePlayerIntoDatabase()
 
     while True:
         # We add some spaces to the board before we print it.
@@ -558,10 +765,17 @@ def main():
               print("Invalid input. Please enter a move in the proper format (e.g. g8f6)")
 
         # check style and save to database
-        analyzeHumansMove(move,pos)
+        if analyzeMode==False :
+            analyzeHumansMove(move,pos)
 
         pos = pos.move(move)
-
+        print("ATRYBUTY PO RUCHU: ")
+        print("CENTRAL_VAL: " +str(central_val))
+        print("WING_VAL: " +str(wing_val))
+        print("AGGRESSIVE_VAL: " +str(aggressive_val))
+        print("DEFENCE_VAL: " +str(defence_val))
+        print("ACTIVE_VAL: " +str(active_val))
+        print("SAFETYKING_VAL: " +str(safetyKing_val))
         # After our move we rotate the board and print it again.
         # This allows us to see the effect of our move.
         print(' '.join(pos.rotate().board))
@@ -579,9 +793,25 @@ def main():
         # 'back rotate' the move before printing it.
         print("Actual score: ", score)
         print("My move:", render(119-move[0]) + render(119-move[1]))
-        pos = pos.move(move)
+        if analyzeMode==False:
+            pos = pos.move(move)
+        else:
+            for i, (t1, t2) in enumerate(analyzedMoves):
+                if t1 == move:
+                    del analyzedMoves[i]
+            if len(analyzedMoves)>0:
+                print("Other analyzed moves:")
+                for move,score in analyzedMoves:
+                    print("Move: "+render(119-move[0]) + render(119-move[1])+" , Score: "+str(score))
 
-    savePlayerIntoDatabase()
-
+            move = None
+            while move not in pos.genMoves():
+                crdn = input("Opponent move: ")
+                try:
+                    move = parse(crdn[0:2]), parse(crdn[2:4])
+                    move= encode(move)
+                except ValueError:
+                    print("Invalid input. Please enter a move in the proper format (e.g. g8f6)")
+            pos = pos.move(move)
 if __name__ == '__main__':
     main()
