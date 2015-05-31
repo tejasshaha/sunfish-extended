@@ -375,7 +375,7 @@ def analyzeWingFields(move):
         val_factor= central_val
     score=0
     if move[1] in WING_FIELDS:
-        score+=0.3*val_factor
+        score+=1.5*val_factor
     return score
 
 def analyzeActiveActiveFields(move,pos):
@@ -397,7 +397,9 @@ def analyzeAggressivePlay(move,pos):
         val_oppossite= aggressive_val
     score=0
     if move[1] in AGGRESSIVE_FIELDS:
-        score+= 0.25*val_factor
+        score+= 0.2*val_factor
+    if move[1] in DEFENCE_FIELDS:
+        score-= 0.05
     p= pos.board[move[0]]
     for d in directions[p]:
         for j in count(move[1]+d, d):
@@ -407,7 +409,7 @@ def analyzeAggressivePlay(move,pos):
                 score-= 0.05*val_oppossite
                 break
             if q.islower():
-                score+=0.05*val_factor
+                score+=0.03*val_factor
                 if q=='k':
                     score+=0.3*val_factor
                 break
@@ -434,7 +436,7 @@ def analyzeSafetyKing(move,pos):
     if move[0] in [kingPos+N,kingPos+N+E,kingPos+N+W] and move[1] not in [kingPos+N,kingPos+N+E,kingPos+N+W]:
         score-= 0.3*val_factor
     if move[1] in [kingPos+N,kingPos+N+E,kingPos+N+W]:
-        score+= 0.3*val_factor
+        score+= 0.35*val_factor
     if move[0]==kingPos:
         defenceCounter=0
         if move[0] in DEFENCE_FIELDS:
@@ -450,7 +452,7 @@ def analyzeSafetyKing(move,pos):
                 defenceCounter+=1
             if pos.board[move[1]+N+W].isupper:
                 defenceCounter+=1
-            score+= 0.3*val_factor*defenceCounter
+            score+= 0.35*val_factor*defenceCounter
     return score
 #############################################################################
 
@@ -543,7 +545,7 @@ def bound(pos, gamma, depth):
         if depth <= 0 and pos.value(move) < 150:
             break
 
-        addedScore= obtainMove(move,pos) if depth>humanDepth else 0
+        addedScore= obtainMove(move,pos)*0.4 if depth>humanDepth else 0
 
         score = -bound(pos.move(move), 1-gamma, depth-1) +addedScore
         if score > best:
