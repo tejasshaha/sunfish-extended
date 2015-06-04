@@ -152,6 +152,7 @@ active_val= 0
 aggressive_val= 0
 defence_val= 0
 safetyKing_val= 0
+structure_val= 0
 
 def setAnalyzeMode():
     global analyzeMode
@@ -161,12 +162,14 @@ def setAnalyzeMode():
     global aggressive_val
     global defence_val
     global safetyKing_val
+    global structure_val
     central_val= 1
     wing_val= 1
     active_val= 1
     aggressive_val=1
     defence_val=1
     safetyKing_val=1
+    structure_val=1
     analyzeMode= True
 
 ###############################################################################
@@ -354,6 +357,13 @@ def checkIfSafetyKing(move,pos):
         return True
     else:
         return False
+
+
+def checkIfStructurePawns(move,pos):
+    if analyzeStructurePawns(move,pos)>0:
+        return True
+    else:
+        return False
 #############################################################
 
 # computer decision
@@ -454,6 +464,45 @@ def analyzeSafetyKing(move,pos):
                 defenceCounter+=1
             score+= 0.35*val_factor*defenceCounter
     return score
+
+def countIslands(table):
+    islands= 0
+    islandFlag= True
+    for i in table:
+        if i>0 and islandFlag:
+            islands+=1
+            islandFlag= False
+        else:
+            islandFlag=True
+    return islands
+
+def analyzeStructurePawns(move,pos):
+    score=0
+    tabPawns=[0,0,0,0,0,0,0,0]
+    differenceTab=[0,0,0,0,0,0,0,0]
+    for i in range(1,8):
+        for j in range(20+i,i+90,10):
+            if pos.board[j]=='P':
+                tabPawns[i-1]+= 1
+    pos0= move[0] % 10 - 1
+    pos1= move[1] % 10 - 1
+    newPawns=tabPawns
+    newPawns[pos0]-=1
+    newPawns[pos1]+=1
+
+    firstIslands= countIslands(tabPawns)
+    newIslands= countIslands(newPawns)
+
+    score+= (firstIslands-newIslands)*structure_val*0.3
+    for i in (0,tabPawns.__len__()-1):
+        differenceTab[i]=tabPawns[i]-newPawns[i]
+    for i in differenceTab:
+        if i<0:
+            score-= structure_val*0.3
+        if i>0:
+            score+= structure_val*0.3
+    return score
+
 #############################################################################
 
 def normalizeParameters():
@@ -463,18 +512,35 @@ def normalizeParameters():
     global aggressive_val
     global defence_val
     global safetyKing_val
+    global structure_val
     if central_val<0:
         central_val=0
+    elif central_val>5:
+        central_val=5
     if wing_val<0:
         wing_val=0
+    elif wing_val>5:
+        wing_val=5
     if active_val<0:
         active_val=0
+    elif active_val>5:
+        active_val=5
     if aggressive_val<0:
         aggressive_val=0
+    elif aggressive_val>5:
+        aggressive_val=5
     if defence_val<0:
         defence_val=0
+    elif defence_val>5:
+        defence_val=5
     if safetyKing_val<0:
         safetyKing_val=0
+    elif safetyKing_val>5:
+        safetyKing_val=5
+    if structure_val<0:
+        structure_val=0
+    elif structure_val>5:
+        structure_val=5
 
 def analyzeHumansMove(move,pos):
     global central_val
@@ -489,6 +555,8 @@ def analyzeHumansMove(move,pos):
     defence_val+= 1 if checkIfDefensivePlay(move)>0 else -0.4
     global safetyKing_val
     safetyKing_val+= 1 if checkIfSafetyKing(move,pos)>0 else -0.4
+    global structure_val
+    structure_val+=1 if checkIfStructurePawns(move,pos)>0 else -0.3
 
     normalizeParameters()
 
@@ -506,6 +574,8 @@ def obtainMove(move,pos):
     scoreShift+= analyzeDefensivePlay(move)
     #king safety
     scoreShift+= analyzeSafetyKing(move,pos)
+    #strucure pawns
+    scoreShift+= analyzeStructurePawns(move,pos)
 
     return scoreShift
 #############################################
@@ -628,28 +698,31 @@ def fillFactorsFromDatabase(player):
     global aggressive_val
     global defence_val
     global safetyKing_val
+    global structure_val
     central_val= player[2]
     wing_val= player[3]
     active_val=player[4]
     aggressive_val=player[5]
     defence_val=player[6]
     safetyKing_val=player[7]
+    structure_val=player[8]
 
 def initDatabaseAndCheckPlayer(name):
     try:
         db = MySQLdb.connect(host="localhost",user="root",passwd="0501",db="sunfish_database")
         with db:
             cur = db.cursor()
-           # cur.execute("DROP TABLE IF EXISTS Players")
-         #   cur.execute("CREATE TABLE Players(Id INT PRIMARY KEY AUTO_INCREMENT, Name VARCHAR(25), centralValue DOUBLE,"
-         #      "wingValue DOUBLE, activeValue DOUBLE , aggressiveValue DOUBLE , defenceValue DOUBLE , safetyKingValue DOUBLE )")
+            cur.execute("DROP TABLE IF EXISTS Players")
+            cur.execute("CREATE TABLE Players(Id INT PRIMARY KEY AUTO_INCREMENT, Name VARCHAR(25), centralValue DOUBLE,"
+               "wingValue DOUBLE, activeValue DOUBLE , aggressiveValue DOUBLE , defenceValue DOUBLE , safetyKingValue DOUBLE, "
+               "structurePawnsValue DOUBLE )")
             # check for player
             cur.execute("SELECT * FROM Players WHERE Name=%s",name)
             player = cur.fetchone()
             print(player)
             if player is None:
                 cur.execute("INSERT INTO Players(Name,centralValue,wingValue,activeValue,aggressiveValue,defenceValue,"
-                            "safetyKingValue) VALUES(%s,0,0,0,0,0,0)",name)
+                            "safetyKingValue, structurePawnsValue) VALUES(%s,0,0,0,0,0,0,0)",name)
             else:
                 fillFactorsFromDatabase(player)
             global playerName
@@ -668,8 +741,8 @@ def savePlayerIntoDatabase():
         with db:
             cur= db.cursor()
             cur.execute("UPDATE Players SET centralValue= %s, wingValue= %s, activeValue= %s, aggressiveValue= %s, "
-                        "defenceValue= %s, safetyKingValue= %s WHERE name= %s",(central_val,wing_val,
-                        active_val,aggressive_val,defence_val,safetyKing_val,playerName))
+                        "defenceValue= %s, safetyKingValue= %s, structurePawnsValue= %s WHERE name= %s",(central_val,wing_val,
+                        active_val,aggressive_val,defence_val,safetyKing_val,structure_val, playerName))
     except MySQLdb.Error, e:
         print("Error %d: %s" % (e.args[0],e.args[1]))
         sys.exit(1)
@@ -725,6 +798,10 @@ def safetyKingScale(val):
     global safetyKing_val
     safetyKing_val= float(val)
 
+def structurePawnsScale(val):
+    global structure_val
+    structure_val- float(val)
+
 def prepareScaleGui():
     master = Tk()
 
@@ -743,12 +820,14 @@ def prepareScaleGui():
     w4 = Scale(bottomframe, from_=0, to=6, label="wings", fg="Red", resolution=0.1, command=wingScale)
     w5 = Scale(endframe, from_=0, to=6, label="activity", fg="Blue", resolution=0.1, command=activeScale)
     w6 = Scale(endframe, from_=0, to=6, label="safety", fg="Red", resolution=0.1, command=safetyKingScale)
+    w7 = Scale(endframe, from_=0, to=6, label="structure", fg="Green", resolution=0.1, command=structurePawnsScale)
     w1.pack(side= LEFT)
     w2.pack(side= LEFT)
     w3.pack(side= LEFT)
     w4.pack(side= LEFT)
     w5.pack(side= LEFT)
     w6.pack(side= LEFT)
+    w7.pack(side= LEFT)
 
 def main():
     pos = Position(initial, 0, (True,True), (True,True), 0, 0)
@@ -794,6 +873,7 @@ def main():
         print("DEFENCE_VAL: " +str(defence_val))
         print("ACTIVE_VAL: " +str(active_val))
         print("SAFETYKING_VAL: " +str(safetyKing_val))
+        print("STRUCTURE_VAL: " +str(structure_val))
         # After our move we rotate the board and print it again.
         # This allows us to see the effect of our move.
         print(' '.join(pos.rotate().board))
