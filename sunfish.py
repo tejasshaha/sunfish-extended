@@ -472,7 +472,7 @@ def countIslands(table):
         if i>0 and islandFlag:
             islands+=1
             islandFlag= False
-        else:
+        elif i<=0:
             islandFlag=True
     return islands
 
@@ -480,7 +480,7 @@ def analyzeStructurePawns(move,pos):
     score=0
     tabPawns=[0,0,0,0,0,0,0,0]
     differenceTab=[0,0,0,0,0,0,0,0]
-    for i in range(1,8):
+    for i in range(1,9):
         for j in range(20+i,i+90,10):
             if pos.board[j]=='P':
                 tabPawns[i-1]+= 1
@@ -493,14 +493,20 @@ def analyzeStructurePawns(move,pos):
     firstIslands= countIslands(tabPawns)
     newIslands= countIslands(newPawns)
 
-    score+= (firstIslands-newIslands)*structure_val*0.3
+    score+= (firstIslands-newIslands)*structure_val*1.3
+    if(score<0):
+        print("AAA")
     for i in (0,tabPawns.__len__()-1):
         differenceTab[i]=tabPawns[i]-newPawns[i]
     for i in differenceTab:
         if i<0:
             score-= structure_val*0.3
+            print("JAJCA")
         if i>0:
             score+= structure_val*0.3
+            print("MAMA")
+        else:
+            score+= 0.1 + structure_val*0.1
     return score
 
 #############################################################################
@@ -556,7 +562,7 @@ def analyzeHumansMove(move,pos):
     global safetyKing_val
     safetyKing_val+= 1 if checkIfSafetyKing(move,pos)>0 else -0.4
     global structure_val
-    structure_val+=1 if checkIfStructurePawns(move,pos)>0 else -0.3
+    structure_val+=0.3 if checkIfStructurePawns(move,pos)>0 else -0.5
 
     normalizeParameters()
 
