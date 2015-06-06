@@ -644,7 +644,6 @@ def initDatabaseAndCheckPlayer(name):
             # check for player
             cur.execute("SELECT * FROM Players WHERE Name=%s",name)
             player = cur.fetchone()
-            print(player)
             if player is None:
                 cur.execute("INSERT INTO Players(Name,centralValue,wingValue,activeValue,aggressiveValue,defenceValue,"
                             "safetyKingValue) VALUES(%s,0,0,0,0,0,0)",name)
@@ -653,7 +652,7 @@ def initDatabaseAndCheckPlayer(name):
             global playerName
             playerName= name
     except MySQLdb.Error, e:
-        print("Error %d: %s" % (e.args[0],e.args[1]))
+        print("Error %d: %s" % (e.args[0],e.args[1 ]))
         sys.exit(1)
     finally:
         if db:
