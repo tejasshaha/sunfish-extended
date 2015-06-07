@@ -296,17 +296,27 @@ def findPosKing(pos):
 # analyze human move
 
 def checkIfCentralFields(move):
-    return move[1] in CENTRAL_FIELDS
+    if move[1] in CENTRAL_FIELDS:
+        return 0.4
+    else:
+        return -0.2
 
 def checkIfWingFields(move):
-    return move[1] in WING_FIELDS
+    if move[1] in WING_FIELDS:
+        return 0.4
+    else:
+        return -0.2
 
 def checkIfActiveActiveFields(move,pos):
-    return move[0] in INACTIVE_FIELDS and move[1] not in INACTIVE_FIELDS and pos.board[move[0]]!= 'K'
+    if move[0] in INACTIVE_FIELDS and move[1] not in INACTIVE_FIELDS and pos.board[move[0]]!= 'K':
+        return 0.4
+    else:
+        return -0.3
 
 def checkIfAggressivePlay(move,pos):
+    score=0.0
     if move[1] in AGGRESSIVE_FIELDS:
-        return True
+        score+=0.5
     aggressive_parameter= 0
     p= pos.board[move[0]]
     for d in directions[p]:
@@ -314,7 +324,7 @@ def checkIfAggressivePlay(move,pos):
             q= pos.board[j]
             if pos.board[j].isspace(): break
             if q.isupper():
-                aggressive_parameter-=0.5
+                aggressive_parameter-=0.4
                 break
             if q.islower():
                 aggressive_parameter+=0.6
@@ -322,21 +332,24 @@ def checkIfAggressivePlay(move,pos):
                     aggressive_parameter+=1
                 break
             if p in ('P', 'N', 'K'): break
-    if aggressive_parameter>0:
-        return True
-    else:
-        return False
+    score+=aggressive_parameter
+    return score
 
 def checkIfDefensivePlay(move):
-    return move[1] in DEFENCE_FIELDS
+    if move[1] in DEFENCE_FIELDS:
+        return 0.4
+    else:
+        return -0.3
 
 def checkIfSafetyKing(move,pos):
-    safety_parameter=0
+    safety_score=0
+    if pos.board[move[0]]=='K' and move[0]==95 and (move[1]==97 or move[1]==93):
+        safety_score+=1.0
     kingPos= findPosKing(pos)
     if move[0] in [kingPos+N,kingPos+N+E,kingPos+N+W] and move[1] not in [kingPos+N,kingPos+N+E,kingPos+N+W]:
-        safety_parameter-= 0.5
+        safety_score-= 0.6
     if move[1] in [kingPos+N,kingPos+N+E,kingPos+N+W]:
-        safety_parameter+= 0.6
+        safety_score+= 0.6
     if move[0]==kingPos:
         defenceCounter=0
         if move[0] in DEFENCE_FIELDS:
@@ -352,18 +365,9 @@ def checkIfSafetyKing(move,pos):
                 defenceCounter+=1
             if pos.board[move[1]+N+W].isupper:
                 defenceCounter+=1
-            safety_parameter+=0.8*defenceCounter
-    if safety_parameter>0:
-        return True
-    else:
-        return False
+            safety_score+=0.8*defenceCounter
+    return safety_score
 
-
-def checkIfStructurePawns(move,pos):
-    if analyzeStructurePawns(move,pos)>0:
-        return True
-    else:
-        return False
 #############################################################
 
 # computer decision
@@ -385,7 +389,7 @@ def analyzeWingFields(move):
         val_factor= central_val
     score=0
     if move[1] in WING_FIELDS:
-        score+=1.5*val_factor
+        score+=0.3*val_factor
     return score
 
 def analyzeActiveActiveFields(move,pos):
@@ -484,29 +488,29 @@ def analyzeStructurePawns(move,pos):
         for j in range(20+i,i+90,10):
             if pos.board[j]=='P':
                 tabPawns[i-1]+= 1
-    pos0= move[0] % 10 - 1
-    pos1= move[1] % 10 - 1
-    newPawns=tabPawns
-    newPawns[pos0]-=1
-    newPawns[pos1]+=1
+    newPawns= list(tabPawns)
+    if pos.board[move[0]]=='P':
+        pos0= move[0] % 10 - 1
+        pos1= move[1] % 10 - 1
+        newPawns[pos0]-=1
+        newPawns[pos1]+=1
 
     firstIslands= countIslands(tabPawns)
     newIslands= countIslands(newPawns)
 
     score+= (firstIslands-newIslands)*structure_val*1.3
-    if(score<0):
-        print("AAA")
     for i in (0,tabPawns.__len__()-1):
         differenceTab[i]=tabPawns[i]-newPawns[i]
+    stable= True
     for i in differenceTab:
         if i<0:
-            score-= structure_val*0.3
-            print("JAJCA")
+            score-= structure_val*0.6
+            stable= False
         if i>0:
-            score+= structure_val*0.3
-            print("MAMA")
-        else:
-            score+= 0.1 + structure_val*0.1
+            score+= structure_val*0.4
+            stable= False
+    if stable:
+        score+= 0.05
     return score
 
 #############################################################################
@@ -550,19 +554,19 @@ def normalizeParameters():
 
 def analyzeHumansMove(move,pos):
     global central_val
-    central_val+= 1 if checkIfCentralFields(move)>0 else -0.4
+    central_val+= checkIfCentralFields(move)
     global wing_val
-    wing_val+= 1 if checkIfWingFields(move)>0 else -0.4
+    wing_val+= checkIfWingFields(move)
     global active_val
-    active_val+= 1 if checkIfActiveActiveFields(move,pos)>0 else -0.4
+    active_val+= checkIfActiveActiveFields(move,pos)
     global aggressive_val
-    aggressive_val+= 1 if checkIfAggressivePlay(move,pos)>0 else -0.5
+    aggressive_val+= checkIfAggressivePlay(move,pos)
     global defence_val
-    defence_val+= 1 if checkIfDefensivePlay(move)>0 else -0.4
+    defence_val+= checkIfDefensivePlay(move)
     global safetyKing_val
-    safetyKing_val+= 1 if checkIfSafetyKing(move,pos)>0 else -0.4
+    safetyKing_val+= checkIfSafetyKing(move,pos)
     global structure_val
-    structure_val+=0.3 if checkIfStructurePawns(move,pos)>0 else -0.5
+    structure_val+= analyzeStructurePawns(move,pos)
 
     normalizeParameters()
 
@@ -581,7 +585,7 @@ def obtainMove(move,pos):
     #king safety
     scoreShift+= analyzeSafetyKing(move,pos)
     #strucure pawns
-    scoreShift+= analyzeStructurePawns(move,pos)
+   # scoreShift+= analyzeStructurePawns(move,pos)
 
     return scoreShift
 #############################################
@@ -621,7 +625,7 @@ def bound(pos, gamma, depth):
         if depth <= 0 and pos.value(move) < 150:
             break
 
-        addedScore= obtainMove(move,pos)*0.4 if depth>humanDepth else 0
+        addedScore= obtainMove(move,pos) if depth>humanDepth else 0
 
         score = -bound(pos.move(move), 1-gamma, depth-1) +addedScore
         if score > best:
@@ -718,10 +722,10 @@ def initDatabaseAndCheckPlayer(name):
         db = MySQLdb.connect(host="localhost",user="root",passwd="0501",db="sunfish_database")
         with db:
             cur = db.cursor()
-            cur.execute("DROP TABLE IF EXISTS Players")
-            cur.execute("CREATE TABLE Players(Id INT PRIMARY KEY AUTO_INCREMENT, Name VARCHAR(25), centralValue DOUBLE,"
-               "wingValue DOUBLE, activeValue DOUBLE , aggressiveValue DOUBLE , defenceValue DOUBLE , safetyKingValue DOUBLE, "
-               "structurePawnsValue DOUBLE )")
+            #cur.execute("DROP TABLE IF EXISTS Players")
+            #cur.execute("CREATE TABLE Players(Id INT PRIMARY KEY AUTO_INCREMENT, Name VARCHAR(25), centralValue DOUBLE,"
+            #   "wingValue DOUBLE, activeValue DOUBLE , aggressiveValue DOUBLE , defenceValue DOUBLE , safetyKingValue DOUBLE, "
+            #   "structurePawnsValue DOUBLE )")
             # check for player
             cur.execute("SELECT * FROM Players WHERE Name=%s",name)
             player = cur.fetchone()
@@ -741,6 +745,8 @@ def initDatabaseAndCheckPlayer(name):
 
 @atexit.register
 def savePlayerIntoDatabase():
+    if analyzeMode==True:
+        return
     try:
         db = MySQLdb.connect(host="localhost",user="root",passwd="0501",db="sunfish_database")
         with db:
@@ -805,7 +811,7 @@ def safetyKingScale(val):
 
 def structurePawnsScale(val):
     global structure_val
-    structure_val- float(val)
+    structure_val= float(val)
 
 def prepareScaleGui():
     master = Tk()
@@ -819,13 +825,13 @@ def prepareScaleGui():
     endframe= Frame(master)
     endframe.pack( side = BOTTOM )
 
-    w1 = Scale(frame, from_=0, to=6, label="aggressive", fg="Blue", resolution=0.1, command=aggressiveScale)
-    w2 = Scale(frame, from_=0, to=6, label="defence", fg="Red", resolution=0.1, command=defenceScale)
-    w3 = Scale(bottomframe, from_=0, to=6, label="centrality", fg="Blue", resolution=0.1, command=centralScale)
-    w4 = Scale(bottomframe, from_=0, to=6, label="wings", fg="Red", resolution=0.1, command=wingScale)
-    w5 = Scale(endframe, from_=0, to=6, label="activity", fg="Blue", resolution=0.1, command=activeScale)
-    w6 = Scale(endframe, from_=0, to=6, label="safety", fg="Red", resolution=0.1, command=safetyKingScale)
-    w7 = Scale(endframe, from_=0, to=6, label="structure", fg="Green", resolution=0.1, command=structurePawnsScale)
+    w1 = Scale(frame, from_=0, to=5, label="aggressive", fg="Blue", resolution=0.1, command=aggressiveScale)
+    w2 = Scale(frame, from_=0, to=5, label="defence", fg="Red", resolution=0.1, command=defenceScale)
+    w3 = Scale(bottomframe, from_=0, to=5, label="centrality", fg="Blue", resolution=0.1, command=centralScale)
+    w4 = Scale(bottomframe, from_=0, to=5, label="wings", fg="Red", resolution=0.1, command=wingScale)
+    w5 = Scale(endframe, from_=0, to=5, label="activity", fg="Blue", resolution=0.1, command=activeScale)
+    w6 = Scale(endframe, from_=0, to=5, label="safety", fg="Red", resolution=0.1, command=safetyKingScale)
+    w7 = Scale(endframe, from_=0, to=5, label="structure", fg="Green", resolution=0.1, command=structurePawnsScale)
     w1.pack(side= LEFT)
     w2.pack(side= LEFT)
     w3.pack(side= LEFT)
