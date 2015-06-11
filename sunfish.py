@@ -411,9 +411,9 @@ def analyzeAggressivePlay(move,pos):
         val_oppossite= aggressive_val
     score=0
     if move[1] in AGGRESSIVE_FIELDS:
-        score+= 0.2*val_factor
+        score+= 1.5*val_factor
     if move[1] in DEFENCE_FIELDS:
-        score-= 0.05
+        score-= 0.1
     p= pos.board[move[0]]
     for d in directions[p]:
         for j in count(move[1]+d, d):
