@@ -131,17 +131,22 @@ pst = {
 #depth of analyze human aspect
 humanDepth= 0
 
+#name of player in the game
 playerName= "player"
 
+#flag for analyze mode or game versus computer
 analyzeMode= False
+#other possible moves in current position in analyze mode
 analyzedMoves= []
 
+#pieces on the board charakteristic for attributes
 CENTRAL_FIELDS= [53,54,55,56,57,63,64,65,66,67]
 WING_FIELDS= [21,22,27,28,31,32,37,38,41,42,47,48,51,52,57,58,61,62,67,68,71,72,77,78,81,82,87,88,91,92,97,98]
 INACTIVE_FIELDS= [91,92,93,94,95,96,97,98]
 AGGRESSIVE_FIELDS= [21,22,23,24,25,26,27,28,31,32,33,34,35,36,37,38]
 DEFENCE_FIELDS= [81,82,83,84,85,86,87,88,91,92,93,94,95,96,97,98]
 
+#behavioral attributes in the game
 # opossites:
 # safety king <> active play
 # central play <> wing play
@@ -154,6 +159,7 @@ defence_val= 0
 safetyKing_val= 0
 structure_val= 0
 
+# at begin normalize attributes and set flag analyzeMode on true
 def setAnalyzeMode():
     global analyzeMode
     global central_val
@@ -171,6 +177,9 @@ def setAnalyzeMode():
     safetyKing_val=1
     structure_val=1
     analyzeMode= True
+
+# needed in thinker gui for analyze position when button 'analyze' was clicked
+thinkerPos=0
 
 ###############################################################################
 # Chess logic
@@ -221,7 +230,7 @@ class Position(namedtuple('Position', 'board score wc bc ep kp')):
     def move(self, move):
         i, j = move
         p, q = self.board[i], self.board[j]
-        # zdefiniowanie funkcji przemieszczenia figury
+        # define function for movement figure
         put = lambda board, i, p: board[:i] + p + board[i+1:]
         # Copy variables and reset ep and kp
         board = self.board
@@ -285,9 +294,10 @@ tp = OrderedDict()
 ###############################################################################
 
 ####################
-# My added functions
+# Behavioral added functions
 ####################
 
+# get position of king
 def findPosKing(pos):
     for i, p in enumerate(pos.board):
         if p=='K':
@@ -295,30 +305,36 @@ def findPosKing(pos):
 
 # analyze human move
 
+# check if move is on central field
 def checkIfCentralFields(move):
     if move[1] in CENTRAL_FIELDS:
         return 0.4
     else:
         return -0.2
 
+# check if move is on wing field
 def checkIfWingFields(move):
     if move[1] in WING_FIELDS:
         return 0.4
     else:
         return -0.2
 
+# check if move is on active field
 def checkIfActiveActiveFields(move,pos):
     if move[0] in INACTIVE_FIELDS and move[1] not in INACTIVE_FIELDS and pos.board[move[0]]!= 'K':
         return 0.4
     else:
         return -0.3
 
+# check if move is aggressive
 def checkIfAggressivePlay(move,pos):
     score=0.0
+    # check if on aggressive field
     if move[1] in AGGRESSIVE_FIELDS:
         score+=0.5
     aggressive_parameter= 0
     p= pos.board[move[0]]
+    # check if figure attacks others
     for d in directions[p]:
         for j in count(move[1]+d, d):
             q= pos.board[j]
@@ -328,6 +344,7 @@ def checkIfAggressivePlay(move,pos):
                 break
             if q.islower():
                 aggressive_parameter+=0.6
+                # if there's check is more aggressive
                 if q=='k':
                     aggressive_parameter+=1
                 break
@@ -335,12 +352,14 @@ def checkIfAggressivePlay(move,pos):
     score+=aggressive_parameter
     return score
 
+# check if move is on defensive field
 def checkIfDefensivePlay(move):
     if move[1] in DEFENCE_FIELDS:
         return 0.4
     else:
         return -0.3
 
+# check if king has structure pawns on the front
 def checkIfSafetyKing(move,pos):
     safety_score=0
     if pos.board[move[0]]=='K' and move[0]==95 and (move[1]==97 or move[1]==93):
@@ -469,6 +488,7 @@ def analyzeSafetyKing(move,pos):
             score+= 0.35*val_factor*defenceCounter
     return score
 
+# count pawns island
 def countIslands(table):
     islands= 0
     islandFlag= True
@@ -480,6 +500,7 @@ def countIslands(table):
             islandFlag=True
     return islands
 
+# structure pawns= islands and double pawns on the same line
 def analyzeStructurePawns(move,pos):
     score=0
     tabPawns=[0,0,0,0,0,0,0,0]
@@ -515,6 +536,7 @@ def analyzeStructurePawns(move,pos):
 
 #############################################################################
 
+# scope of behavioral attributes; it helps for doing still strong moves for engine
 def normalizeParameters():
     global central_val
     global wing_val
@@ -552,6 +574,7 @@ def normalizeParameters():
     elif structure_val>5:
         structure_val=5
 
+# check behavioral aspects of moves opponents, if there's something, add score for save in database
 def analyzeHumansMove(move,pos):
     global central_val
     central_val+= checkIfCentralFields(move)
@@ -570,6 +593,7 @@ def analyzeHumansMove(move,pos):
 
     normalizeParameters()
 
+#  check behavioral aspects of position, if there's, add score
 def obtainMove(move,pos):
     scoreShift=0
     #central play
@@ -625,6 +649,7 @@ def bound(pos, gamma, depth):
         if depth <= 0 and pos.value(move) < 150:
             break
 
+        # added score of behavioral; humanDepth keeps depth of behavioral analyze
         addedScore= obtainMove(move,pos) if depth>humanDepth else 0
 
         score = -bound(pos.move(move), 1-gamma, depth-1) +addedScore
@@ -676,7 +701,9 @@ def search(pos, maxn=NODES_SEARCHED):
             if score < gamma:
                 upper = score
 
-        print("Searched %d nodes. Depth %d. Score %d(%d/%d)" % (nodes, depth, score, lower, upper))
+       # print("Searched %d nodes. Depth %d. Score %d(%d/%d)" % (nodes, depth, score, lower, upper))
+
+        # keeps other good analyzed moves in table
         if analyzeMode:
             new_move= tp.get(pos).move
             for i, (t1,t2) in enumerate(analyzedMoves):
@@ -701,6 +728,7 @@ def search(pos, maxn=NODES_SEARCHED):
 # Database Logic
 ###############################################################################
 
+# read attributtes from database if player exist
 def fillFactorsFromDatabase(player):
     global central_val
     global wing_val
@@ -743,6 +771,7 @@ def initDatabaseAndCheckPlayer(name):
         if db:
             db.close()
 
+# at the end of the game, save player into database
 @atexit.register
 def savePlayerIntoDatabase():
     if analyzeMode==True:
@@ -813,6 +842,22 @@ def structurePawnsScale(val):
     global structure_val
     structure_val= float(val)
 
+# button analyze
+def analyze():
+    move, score = search(thinkerPos)
+
+    print("\n\nActual score: ", score)
+    print("My move:", render(119-move[0]) + render(119-move[1]))
+
+    for i, (t1, t2) in enumerate(analyzedMoves):
+        if t1 == move:
+            del analyzedMoves[i]
+    if len(analyzedMoves)>0:
+        print("Other analyzed moves:")
+        for move,score in analyzedMoves:
+            print("Move: "+render(119-move[0]) + render(119-move[1])+" , Score: "+str(score))
+
+
 def prepareScaleGui():
     master = Tk()
 
@@ -832,6 +877,7 @@ def prepareScaleGui():
     w5 = Scale(endframe, from_=0, to=5, label="activity", fg="Blue", resolution=0.1, command=activeScale)
     w6 = Scale(endframe, from_=0, to=5, label="safety", fg="Red", resolution=0.1, command=safetyKingScale)
     w7 = Scale(endframe, from_=0, to=5, label="structure", fg="Green", resolution=0.1, command=structurePawnsScale)
+    b = Button(endframe, text="analyze", command=analyze)
     w1.pack(side= LEFT)
     w2.pack(side= LEFT)
     w3.pack(side= LEFT)
@@ -839,6 +885,7 @@ def prepareScaleGui():
     w5.pack(side= LEFT)
     w6.pack(side= LEFT)
     w7.pack(side= LEFT)
+    b.pack(side= LEFT)
 
 def main():
     pos = Position(initial, 0, (True,True), (True,True), 0, 0)
@@ -877,14 +924,7 @@ def main():
             analyzeHumansMove(move,pos)
 
         pos = pos.move(move)
-        print("ATRYBUTY PO RUCHU: ")
-        print("CENTRAL_VAL: " +str(central_val))
-        print("WING_VAL: " +str(wing_val))
-        print("AGGRESSIVE_VAL: " +str(aggressive_val))
-        print("DEFENCE_VAL: " +str(defence_val))
-        print("ACTIVE_VAL: " +str(active_val))
-        print("SAFETYKING_VAL: " +str(safetyKing_val))
-        print("STRUCTURE_VAL: " +str(structure_val))
+
         # After our move we rotate the board and print it again.
         # This allows us to see the effect of our move.
         print(' '.join(pos.rotate().board))
@@ -905,6 +945,9 @@ def main():
         if analyzeMode==False:
             pos = pos.move(move)
         else:
+            # keep pos for analyze
+            global thinkerPos
+            thinkerPos= pos
             for i, (t1, t2) in enumerate(analyzedMoves):
                 if t1 == move:
                     del analyzedMoves[i]
